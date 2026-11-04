@@ -1,2 +1,6 @@
 *.log
 .env
+/.cache/
+/research/*-src/
+/research/*.prom
+/research/Status-*.java

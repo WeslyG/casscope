@@ -1,0 +1,12 @@
+services:
+  exporter:
+    image: cassandra-lab-exporter:0.9.14
+    build:
+      context: .
+      dockerfile: monitoring/Dockerfile.exporter
+    container_name: cassandra-lab-exporter-standalone
+    network_mode: service:cassandra1
+    volumes_from:
+      - cassandra1:ro
+    restart: unless-stopped
+    mem_limit: 512m

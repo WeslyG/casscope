@@ -1,0 +1,4 @@
+FROM cassandra:4.1.12@sha256:b877532a79865d0212c860352bb9c3b0be97db9628a662ea815fb90ea4033158
+COPY .cache/cassandra-exporter-standalone-0.9.14.jar /opt/exporter.jar
+ENTRYPOINT ["java", "-Xmx256m", "-jar", "/opt/exporter.jar"]
+CMD ["--listen=:9500"]

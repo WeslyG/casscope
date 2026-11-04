@@ -40,3 +40,31 @@ CQL доступен с хоста на `127.0.0.1:9042`; внутри Docker с
 `docker compose down -v` удаляет данные: запускать только при намеренном сбросе.
 
 Образ Cassandra: https://hub.docker.com/_/cassandra
+
+## Проверка exporter
+
+Установлен Instaclustr cassandra-exporter 0.9.14 в standalone-режиме для cassandra1.
+Он работает в сетевом пространстве узла и читает локальный JMX без изменения
+настроек JMX Cassandra. Метрики слушают порт 9500 внутри этого пространства;
+на хост порт не опубликован. Prometheus не устанавливался.
+
+Воспроизводимый запуск (Python на хосте либо внутри devcontainer):
+
+```bash
+python monitoring/download-exporter.py
+docker compose -f compose.yaml -f compose.monitoring.yaml up -d --build --no-deps exporter
+```
+
+Чтение метрик с хоста:
+
+```bash
+docker exec cassandra-lab-cassandra1-1 python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:9500/metrics').read().decode())"
+```
+
+Проверка паузой cassandra3 подтвердила `endpoint_active: 1 → 0 → 1`, рост phi и
+downtime. Полного состояния кольца N/J/L/M exporter не отдаёт. Подробности и
+границы проверки: `research/exporter-investigation.txt`; сырые выборки endpoint
+метрик и nodetool status сохранены рядом. Для мониторинга глазами каждого узла
+нужен отдельный exporter/scrape target на каждом узле; установлен один для проверки.
+Также обнаружен дефект разбора scope `IP_7000`: часть Connection-метрик, включая
+GossipMessageCompletedTasks, пропускается с предупреждениями в логе exporter.

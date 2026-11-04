@@ -1,0 +1,88 @@
+Проверка exporter / Cassandra 4.1.12 — 2026-11-05
+
+Пользователь не указал точный репозиторий. Проверены два распространённых проекта.
+Практический тест выполнен только для Instaclustr standalone 0.9.14.
+
+1. Instaclustr / Zegelin cassandra-exporter
+
+Релиз v0.9.14: commit addcc38e46e5ed5d7d949dd0787c815a6e7a4187.
+Просмотренный HEAD: aa129bff8566fe1d84bf78f0e9dd105448562e3f.
+SHA256 standalone JAR: 924078d5bf90fe0661b857668802fb375b4896c547c739dd3ce8ba6379ed602a.
+Матрица проекта указывает совместимость 0.9.14 с Cassandra 4.1.4+.
+Репозиторий архивирован 2026-01-14.
+
+README утверждает, что standalone не имеет gossip-метрик. Фактический релиз
+0.9.14 это опровергает на нашей Cassandra 4.1.12:
+- cassandra_endpoint_active: доступность каждого endpoint глазами наблюдателя;
+- cassandra_endpoint_generation: generation gossip;
+- cassandra_endpoint_downtime_seconds_total: downtime, возвращаемый Gossiper;
+- cassandra_endpoint_phi: подозрение FailureDetector, для удалённых endpoints.
+
+Результат контролируемого теста, наблюдатель cassandra1 (172.18.0.2):
+                         до паузы       пауза cassandra3      после возобновления
+nodetool status node3    UN             DN                    UN
+endpoint_active node3   1              0                     1
+phi node3               0.433          11.292                измерен, есть в snapshot
+downtime node3           0              7.989 секунд          есть в snapshot
+На паузу ставился только cassandra3, на 25 секунд; unpause выполнен в finally.
+Состояние после теста: все три узла UN, snapshots status-recovered/endpoints-recovered.
+Значения — отдельные выборки, а не обещание точного времени обнаружения отказа.
+
+Исходники: RemoteGossiperMBeanMetricFamilyCollector читает FailureDetector.SimpleStates,
+вызывает getCurrentGenerationNumber/getEndpointDowntime на Gossiper и преобразует
+UP в active=1. В агенте InternalGossiperMBeanMetricFamilyCollector читает Gossiper
+напрямую. FailureDetectorMBeanMetricFamilyCollector экспортирует phi.
+README в части standalone gossip устарел относительно проверенного бинарника.
+
+Реальный пробел: нет endpoint-состояний NORMAL/JOINING/LEAVING/MOVING, т.е.
+второго символа N/J/L/M в nodetool status. Это установлено по реализации
+collectors и отсутствию таких metric families в снятой exposition; переходы
+bootstrap/decommission/move в этом тесте не выполнялись. Нельзя приравнивать
+endpoint_active=1 к UN, готовности CQL или исправности репликации.
+Вид на доступность локален наблюдателю: сохранять оба измерения observer/endpoint,
+не сводить их заранее к единственному состоянию узла. Cassandra_node в метриках —
+наблюдатель; endpoint — наблюдаемый узел. Prometheus up — доступность HTTP exporter,
+а не мнение Cassandra о доступности соседнего узла.
+
+Для полного аналога status нужен дополнительный сборщик JMX StorageService:
+LiveNodes/UnreachableNodes, JoiningNodes/LeavingNodes/MovingNodes, LoadMap,
+TokenToEndpointMap, EndpointToHostId/HostIdToEndpoint и EndpointSnitchInfo,
+ownership с учётом keyspace. Status.java Cassandra 4.1.12 использует эти данные
+через NodeProbe; это не принципиальная недоступность сведений через JMX.
+Рекомендуемая модель дополнительной метрики — observer, endpoint, state плюс
+отдельная доступность. UNKNOWN должен отличаться от DOWN при ошибке чтения JMX.
+Реализация дополнительного сборщика в эту проверку не входила.
+
+2. Criteo cassandra_exporter
+
+Просмотренный commit: 685c3d6d5e1be26c5c82c32ee4f8cd27f8c7ddc7.
+Стандартная blacklist исключает org:apache:cassandra:db:.*, включая StorageService.
+JmxScraper.updateMetric преобразует java.util.List в размер списка, теряя адреса.
+java.util.Map/строковые состояния общего назначения не раскладываются на
+endpoint-labels. Снятие blacklist само по себе не даст полного nodetool status.
+Это проверка исходников, не запуск Criteo на 4.1.12; совместимость не утверждается.
+
+3. Ограничения эксперимента
+
+Установлен один exporter на cassandra1. Prometheus server и alert rules не ставились.
+Не проверены javaagent бинарник, другие exporter и другие версии Cassandra.
+У временного standalone контейнера до добавления read-only volume отсутствовали
+пути данных Cassandra, поэтому были ошибки сбора filesystem; это отдельно от gossip.
+В сохранённой Compose-конфигурации данные подключены read-only через volumes_from.
+Проверенный режим использует local JMX, сетевое пространство cassandra1.
+Глобальные изменения remote JMX/authentication не делались.
+
+Дополнительно обнаружен отдельный дефект совместимости 0.9.14 с 4.1.12:
+collectors org.apache.cassandra.metrics:type=Connection не регистрируются для
+scope вида 172.18.0.3_7000: IllegalArgumentException, "is not an IP string literal".
+Это затрагивает в том числе GossipMessageCompletedTasks и транспортные очереди,
+но не endpoint_active/phi/generation/downtime, проверенные выше. Следовательно,
+заявленная совместимость не означает полноту всех метрик этого релиза.
+
+Источники:
+https://github.com/instaclustr/cassandra-exporter
+https://github.com/instaclustr/cassandra-exporter/releases/tag/v0.9.14
+https://github.com/instaclustr/cassandra-exporter/blob/addcc38e46e5ed5d7d949dd0787c815a6e7a4187/standalone/src/main/java/com/zegelin/cassandra/exporter/collector/RemoteGossiperMBeanMetricFamilyCollector.java
+https://github.com/criteo/cassandra_exporter/blob/685c3d6d5e1be26c5c82c32ee4f8cd27f8c7ddc7/src/main/java/com/criteo/nosql/cassandra/exporter/JmxScraper.java
+https://github.com/criteo/cassandra_exporter/blob/685c3d6d5e1be26c5c82c32ee4f8cd27f8c7ddc7/README.md
+https://github.com/apache/cassandra/blob/cassandra-4.1.12/src/java/org/apache/cassandra/tools/nodetool/Status.java

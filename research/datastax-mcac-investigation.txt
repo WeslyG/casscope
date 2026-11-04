@@ -1,0 +1,44 @@
+DataStax MCAC — проверка исходников 2026-11-05
+Репозиторий уточнён пользователем: datastax/metric-collector-for-apache-cassandra.
+Commit: bfc5f6a49eeff2db3a360457904e24bff1684742.
+
+Вывод: в стандартной реализации отсутствует снимок доступности endpoints глазами
+каждого узла и состояния кольца из nodetool status. Это отличается от ранее
+проверенного Instaclustr, у которого endpoint_active присутствует.
+
+UnixSocketClient.java:148 использует CassandraMetricsRegistry.Metrics и отдельный
+agentAddedMetricsRegistry. Это сбор зарегистрированных метрик, не произвольных
+JMX MBeans. В src/main не найдены обращения к Gossiper/FailureDetector,
+LiveNodes/UnreachableNodes, JoiningNodes/LeavingNodes/MovingNodes.
+StorageService используется для local host ID и проверки shutdown hook,
+не для экспорта состояния соседних узлов.
+
+В overview.jsonnet:337–372 панель Nodes Status вычисляется по:
+max by (cluster, dc, rack, instance) (
+  changes(mcac_thread_pools_completed_tasks{pool_name="gossip_stage", ...}[2m:30s])
+) > bool 0
+
+Это эвристика активности локальной GossipStage за окно времени, а не результат
+failure detector о конкретном endpoint. Из неё нельзя получить мнение A о B,
+асимметричную видимость соседей или состояния N/J/L/M.
+Рост счётчика не доказывает доступность CQL или корректность репликации.
+README/описание панели отдельно предупреждает о доступности native transport.
+Prometheus up также измеряет доступность scrape endpoint, не gossip-членство.
+
+Для Cassandra 4.1 README требует специальный bundle с суффиксом -4.1-beta1.
+Отсутствие нужного сборщика не исправляется разрешающими filtering_rules:
+фильтрация работает над уже собранными метриками.
+
+Рекомендуемое дополнение: периодический read-only сбор StorageService и
+FailureDetector/Gossiper через JMX или небольшой Java collector внутри JVM.
+Экспортировать отдельно доступность и состояние кольца, с observer и endpoint;
+ошибку опроса не выдавать за DOWN. Для диагностики асимметрии опрашивать все узлы.
+
+Граница проверки: изучены исходники MCAC и штатная панель. MCAC на стенд ещё не
+устанавливался, конкретная версия и локальные расширения пользователя неизвестны.
+Работающий лабораторный exporter остаётся Instaclustr 0.9.14.
+
+Источники:
+https://github.com/datastax/metric-collector-for-apache-cassandra/blob/bfc5f6a49eeff2db3a360457904e24bff1684742/src/main/java/com/datastax/mcac/UnixSocketClient.java#L148
+https://github.com/datastax/metric-collector-for-apache-cassandra/blob/bfc5f6a49eeff2db3a360457904e24bff1684742/dashboards/grafana/dashboards-jsonnet/overview.jsonnet#L333
+https://github.com/datastax/metric-collector-for-apache-cassandra#installation-of-agent

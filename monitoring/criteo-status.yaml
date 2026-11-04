@@ -1,0 +1,9 @@
+host: localhost:7199
+ssl: false
+listenAddress: 0.0.0.0
+listenPort: 9503
+blacklist: []
+maxScrapFrequencyInSec:
+  10:
+    - 'org:apache:cassandra:db:storageservice:(livenodes|unreachablenodes|joiningnodes|leavingnodes|movingnodes).*'
+    - 'org:apache:cassandra:net:failuredetector:.*'

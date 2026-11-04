@@ -1,0 +1,26 @@
+[
+  {
+    "name": "cassandra_exporter-2.3.8.jar",
+    "Hash": "EED358AF81C684B4CDF96BDBE8CF7D00E1B0BB8D65DE97B6768F69B53681ABDD"
+  },
+  {
+    "name": "cassandra-exporter-agent-0.9.14.jar",
+    "Hash": "7A1711E724CAB41B12EE7A1A50ABD83978574FA228CE9611F1664FB19A2BBFD5"
+  },
+  {
+    "name": "cassandra-exporter-standalone-0.9.14.jar",
+    "Hash": "924078D5BF90FE0661B857668802FB375B4896C547C739DD3CE8BA6379ED602A"
+  },
+  {
+    "name": "casspoke-1.3.6.jar",
+    "Hash": "4BC73F10352D029E73EFBBCA949E09E330EC2C5DE423FEFFA06D2EB4CA9FB816"
+  },
+  {
+    "name": "jmx_prometheus_standalone-1.7.0.jar",
+    "Hash": "F62F518D3A396320E4604D6981B6C4F4BD8A4FA46E6200791CF501CB3C6DDD44"
+  },
+  {
+    "name": "datastax-mcac-agent-0.3.6-4.1-beta1.tar.gz",
+    "Hash": "918CC3C5BA89970FBBE30406E17F50B514363BCC666A6313FEE4897DD4CC8601"
+  }
+]

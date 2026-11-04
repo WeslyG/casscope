@@ -1,0 +1,6 @@
+FROM cassandra:4.1.12@sha256:b877532a79865d0212c860352bb9c3b0be97db9628a662ea815fb90ea4033158
+ADD .cache/datastax-mcac-agent-0.3.6-4.1-beta1.tar.gz /opt/
+COPY .cache/cassandra-exporter-agent-0.9.14.jar /opt/instaclustr-agent.jar
+RUN mv /opt/datastax-mcac-agent-0.3.6-4.1-beta1 /opt/mcac && \
+    sed -i 's/write_to_disk_enabled: true/write_to_disk_enabled: false/' /opt/mcac/config/metric-collector.yaml && \
+    printf '\nJVM_OPTS="$JVM_OPTS -javaagent:/opt/instaclustr-agent.jar=--listen=:9500 -javaagent:/opt/mcac/lib/datastax-mcac-agent.jar"\n' >> /etc/cassandra/cassandra-env.sh

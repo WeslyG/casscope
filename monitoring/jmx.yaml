@@ -1,0 +1,10 @@
+hostPort: localhost:7199
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+includeObjectNames:
+  - "org.apache.cassandra.metrics:*"
+  - "org.apache.cassandra.db:type=StorageService"
+  - "org.apache.cassandra.net:type=FailureDetector"
+  - "org.apache.cassandra.net:type=Gossiper"
+rules:
+  - pattern: ".*"

@@ -1,0 +1,33 @@
+services:
+  casspoke:
+    image: cassandra-lab-comparison:local
+    container_name: cassandra-lab-casspoke
+    network_mode: service:cassandra1
+    mem_limit: 512m
+    command: ["-jar", "/opt/casspoke.jar", "/opt/casspoke.yaml"]
+  cassandra2:
+    image: cassandra-lab-agents:4.1.12
+    build:
+      context: .
+      dockerfile: monitoring/Dockerfile.agents
+  jmx:
+    image: cassandra-lab-comparison:local
+    build:
+      context: .
+      dockerfile: monitoring/Dockerfile.comparison
+    container_name: cassandra-lab-jmx
+    network_mode: service:cassandra1
+    mem_limit: 512m
+    command: ["-jar", "/opt/jmx.jar", "9501", "/opt/jmx.yaml"]
+  criteo:
+    image: cassandra-lab-comparison:local
+    container_name: cassandra-lab-criteo
+    network_mode: service:cassandra1
+    mem_limit: 512m
+    command: ["-jar", "/opt/criteo.jar", "/opt/criteo.yaml"]
+  criteo-status:
+    image: cassandra-lab-comparison:local
+    container_name: cassandra-lab-criteo-status
+    network_mode: service:cassandra1
+    mem_limit: 512m
+    command: ["-jar", "/opt/criteo.jar", "/opt/criteo-status.yaml"]

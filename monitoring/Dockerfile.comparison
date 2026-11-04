@@ -1,0 +1,7 @@
+FROM cassandra:4.1.12@sha256:b877532a79865d0212c860352bb9c3b0be97db9628a662ea815fb90ea4033158
+COPY .cache/jmx_prometheus_standalone-1.7.0.jar /opt/jmx.jar
+COPY .cache/cassandra_exporter-2.3.8.jar /opt/criteo.jar
+COPY .cache/casspoke-1.3.6.jar /opt/casspoke.jar
+COPY monitoring/jmx.yaml monitoring/criteo.yaml monitoring/criteo-status.yaml /opt/
+COPY monitoring/casspoke.yaml /opt/casspoke.yaml
+ENTRYPOINT ["java", "-Xmx256m"]

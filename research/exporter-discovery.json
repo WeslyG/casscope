@@ -1,0 +1,92 @@
+[
+  {
+    "full_name": "criteo/cassandra_exporter",
+    "stargazers_count": 173,
+    "pushed_at": "2023-02-14T09:47:02Z",
+    "description": "Apache Cassandra® metrics exporter for Prometheus"
+  },
+  {
+    "full_name": "zegelin/cassandra-exporter",
+    "stargazers_count": 25,
+    "pushed_at": "2022-02-26T00:46:18Z",
+    "description": "Personal fork of cassandra-exporter. See Instaclustr's repo for releases."
+  },
+  {
+    "full_name": "suhailpatel/seastat",
+    "stargazers_count": 18,
+    "pushed_at": "2021-03-24T21:17:25Z",
+    "description": "A standalone Cassandra Prometheus Exporter with speed 🏎️"
+  },
+  {
+    "full_name": "oleg-glushak/cassandra-prometheus-jmx",
+    "stargazers_count": 17,
+    "pushed_at": "2018-04-10T08:39:58Z",
+    "description": "Cassandra monitoring in Prometheus using JMX exporter"
+  },
+  {
+    "full_name": "criteo/casspoke",
+    "stargazers_count": 6,
+    "pushed_at": "2024-03-21T15:03:20Z",
+    "description": "Prometheus probe exporter for Cassandra latency and availability"
+  },
+  {
+    "full_name": "woblerr/medusa_exporter",
+    "stargazers_count": 6,
+    "pushed_at": "2026-07-16T16:44:23Z",
+    "description": "Prometheus exporter for Medusa for Apache Cassandra"
+  },
+  {
+    "full_name": "argussecurity/docker-cassandra-prometheus",
+    "stargazers_count": 6,
+    "pushed_at": "2016-05-08T18:12:52Z",
+    "description": "Docker Official Cassandra image, with Prometheus' JMX Exporter added"
+  },
+  {
+    "full_name": "fcgravalos/instaclustr_exporter",
+    "stargazers_count": 6,
+    "pushed_at": "2018-02-03T06:39:04Z",
+    "description": "Metrics Exporter from InstaClustr API to Prometheus"
+  },
+  {
+    "full_name": "smok-serwis/cassandra",
+    "stargazers_count": 3,
+    "pushed_at": "2024-12-22T21:52:01Z",
+    "description": "Docker image: OpenJDK 17 + Cassandra 5.0.2 + Prometheus JMX exporter fully configurable through env's + tracing with Jaeger"
+  },
+  {
+    "full_name": "sarma1807/cass-prom-file-exporter",
+    "stargazers_count": 2,
+    "pushed_at": "2026-04-24T11:33:19Z",
+    "description": "Cassandra Prometheus File Exporter"
+  },
+  {
+    "full_name": "rustyrazorblade/cassandra-prometheus-exporter",
+    "stargazers_count": 2,
+    "pushed_at": "2024-02-18T20:53:41Z",
+    "description": "POC of an exporter, not meant for production"
+  },
+  {
+    "full_name": "canonical/cassandra-exporter-snap",
+    "stargazers_count": 1,
+    "pushed_at": "2026-08-14T07:43:48Z",
+    "description": "A snap package for Cassandra Prometheus Exporter."
+  },
+  {
+    "full_name": "crystalloide/Prometheus_Grafana",
+    "stargazers_count": 1,
+    "pushed_at": "2025-09-30T21:07:56Z",
+    "description": "Cluster cassandra 5.0 JMX exporter Prometheus_Grafana"
+  },
+  {
+    "full_name": "woblerr/medusa_exporter-dashboard",
+    "stargazers_count": 1,
+    "pushed_at": "2026-01-06T20:29:56Z",
+    "description": "Grafana dashboard for medusa_exporter. "
+  },
+  {
+    "full_name": "SaskoMSYS/cassandra-prometheus",
+    "stargazers_count": 0,
+    "pushed_at": "2017-03-14T16:08:52Z",
+    "description": "prometheus exporter for cassandra"
+  }
+]

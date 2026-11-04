@@ -1,0 +1,178 @@
+СРАВНЕНИЕ ЭКСПОРТЕРОВ CASSANDRA — 2026-11-05
+
+Вывод
+======
+Самая зрелая по сопровождению универсальная основа — Prometheus JMX Exporter.
+Самое полезное готовое покрытие доступности соседей среди запущенных вариантов —
+Instaclustr 0.9.14, но проект архивирован и часть Connection-метрик сломана на 4.1.12.
+MCAC практически работает на 4.1.12, но нужный пользователю пробел подтверждён:
+нет состояния соседей глазами каждого наблюдателя. Casspoke дополняет внутренние
+метрики проверкой клиентского CQL-пути; заменить им Cassandra exporter нельзя.
+
+Для уже работающего MCAC не обнаружено оснований срочно менять весь мониторинг:
+рационально добавить read-only exporter состояния StorageService/FailureDetector
+с observer/endpoint и отдельную CQL-проверку. Новый маленький exporter не реализован.
+Для новой самостоятельной инсталляции: JMX Exporter с выбранными MBeans плюс
+сборщик членства и CQL-probe. Для K8ssandra рассматривать родной MAAC endpoint.
+Это инженерная оценка, не сертификация и не рекомендация по одному лишь GitHub stars.
+
+Область обзора
+==============
+Основные отдельные публичные реализации и соседние решения. Не обещается список
+каждого форка, Docker-образа и частного скрипта. Поиск GitHub и official Prometheus /
+Apache Cassandra catalog сохранён в exporter-discovery.json; forks проверены отдельно.
+Scylla exporters и метрики резервного копирования Medusa не заменяют Cassandra metrics.
+
+Матрица
+-------
+Проект / версия | Практика 4.1.12 | Gossip / nodetool | Зрелость и ограничения
+
+Prometheus jmx_exporter 1.7.0
+  Запущен standalone через local JMX на node1. /metrics работает.
+  PhiValues в TabularData экспортируется по endpoint. GossipRunning и другие
+  локальные scalar attributes доступны. List/Map LiveNodes/UnreachableNodes
+  в проверенном режиме не превращаются в метки endpoint; полного U/D + N/J/L/M нет.
+  Плюсы: активный официальный проект, релиз 2026-10-06, богатая конфигурация.
+  Нужны тщательно выбранные MBeans/rules. Наш catch-all специально широкий;
+  он не является оптимизированным production-конфигом.
+
+Instaclustr cassandra-exporter 0.9.14 — standalone И javaagent
+  Оба режима запущены, оба показали active(node3)=0 при паузе и 1 после восстановления.
+  Phi, generation, downtime присутствуют. N/J/L/M не экспортируются.
+  Сильная Cassandra-specific семантика и labels, но архив с 2026-01-14.
+  Релиз 2024-06-27. В обоих режимах воспроизведён баг Connection.scope=IP_7000:
+  IllegalArgumentException "is not an IP string literal", часть collectors пропущена.
+  README про отсутствие standalone gossip устарел относительно бинарника.
+
+Zegelin cassandra-exporter
+  Не запускался отдельно: исходный проект той же семьи, README направляет к Instaclustr.
+  Последний опубликованный релиз v0.9.9 от 2019-12-03, pushed_at 2022-02-26.
+  Не стоит считать отдельным современным кандидатом для Cassandra 4.1.
+
+Criteo cassandra_exporter 2.3.8
+  Запущен, работает на 4.1.12. Два конфига: общий с blacklist StorageService
+  и диагностический только с разрешёнными status attributes.
+  Во втором при паузе node3: LiveNodes=2, UnreachableNodes=1, без адресов.
+  java.util.List превращается в size; общие Map не превращаются в endpoint-series.
+  Готового полного nodetool status нет. Кэширование — осознанная часть архитектуры.
+  Последний релиз 2022-03-26, pushed_at 2023-02-14. Не первый выбор для новой системы.
+  Общий конфиг адаптирован из sample: основные blacklist, интервал 10 секунд,
+  не точная неизменённая копия всех фильтров README.
+
+DataStax MCAC 0.3.6-4.1-beta1
+  Реально установлен на node2. Collectd /metrics :9103 работает, Cassandra и OS
+  metrics присутствуют. Raw имена collectd_mcac_* ещё не прошли relabeling Prometheus.
+  Счётчик completed_tasks GossipStage продолжил расти: 438 -> 611, пока node3 DOWN.
+  Нет endpoint state matrix, N/J/L/M, отдельного failure-detector phi.
+  Штатный Nodes Status — эвристика активности локальной GossipStage.
+  Релиз 2025-03-31, для 4.1 нужен специальный bundle. Есть готовые dashboards,
+  но collectd/Java-agent сложнее универсального HTTP exporter. Запуск подтверждён.
+
+K8ssandra Management API (MAAC), metrics endpoint, релиз v0.1.128
+  Проверены исходники, не запускался в этом эксперименте.
+  Активный проект, релиз 2026-10-29. Современный вариант для K8ssandra.
+  MetricsInterceptor регистрирует CassandraDropwizardExports, JvmExports,
+  CassandraTasksExports. Последний добавляет compaction/streaming tasks, не gossip matrix.
+  Возможность получить состояние через management API не равна наличию такой
+  Prometheus-метрики. По просмотренному коду полного аналога status в /metrics нет.
+
+Seastat (HEAD dba52b47bbbd7cf82ae0f13ff970dfc3fcb2c55c)
+  Проверены исходники, на 4.1.12 не запускался. Go exporter поверх Jolokia (JMX/HTTP).
+  Есть seastat_storage_node_status{node,state,status}; собирает live/unreachable и
+  joining/moving/leaving. Это наиболее близкая к задаче модель из альтернатив.
+  Важно: DOWN перекрывает ring state, поэтому две оси статуса полностью не сохранены.
+  README: рассчитан на Cassandra 3.0.18, более новые версии могут давать нули.
+  Нет published releases, pushed_at 2021-03-24. Не зрелая готовая замена для 4.1.
+
+Criteo Casspoke 1.3.6
+  Реально запущен, выполняет CQL read/write checks и экспортирует per-node availability.
+  Клиентский взгляд, не матрица gossip наблюдателей и не N/J/L/M.
+  disablebinary node3: nodetool UN, Instaclustr active=1, Casspoke cassandra_up=0.
+  После enablebinary Casspoke up=1 для всех трёх. Работает на 4.1.12 в этом тесте.
+  Релиз 2024-03-21. Полезное дополнение, не замена метрик Cassandra/JVM.
+  Probe выполняет записи, а не только read-only мониторинг: исходники используют
+  system_traces.events. Для production отдельно согласовать права и тестовые данные.
+
+sarma1807/cass-prom-file-exporter
+  Только документация, не запускался. Небольшой file-based вариант, Java >=11,
+  нет published releases; pushed_at 2026-04-24. Покрытие состояния узлов на 4.1
+  не подтверждено. Отсутствие evidence не трактуется как доказанное отсутствие функции.
+
+rustyrazorblade/cassandra-prometheus-exporter
+  Только документация, не запускался. Автор прямо маркирует как POC, не для production.
+
+AxonOps
+  Отдельная платформа: Cassandra/OS agent отправляет данные серверу AxonOps,
+  у сервера есть Prometheus-compatible API. Не автономный drop-in /metrics exporter
+  той же категории. Не разворачивалась; gossip-покрытие в этом эксперименте не проверено.
+
+Упаковки вроде oleg-glushak/cassandra-prometheus-jmx, Docker-образы с JMX exporter
+и canonical/cassandra-exporter-snap учтены как packaging, а не новые алгоритмы сбора.
+Для canonical детали базового collector в этом эксперименте не подтверждены.
+
+Фактический стенд и методика
+===========================
+Cassandra 4.1.12, JDK11 официального образа, 3 узла, dc1 / rack1..3.
+Данные в существующих volumes не удалялись. Пересоздан только node2 с образом агентов.
+node1: Instaclustr standalone, JMX standalone, Criteo и Criteo status-filter sidecars.
+node2: Instaclustr javaagent и MCAC; это совместный запуск, не изолированный benchmark.
+node3: объект fault tests. Casspoke работает отдельным CQL-клиентом возле node1.
+
+Основной автоматический прогон monitoring/compare.py:
+- 3 последовательных HTTP scrape каждого режима на здоровом кластере;
+- pause node3, ожидание 35 секунд, nodetool status и scrape;
+- unpause в finally, подтверждение трёх UN;
+- disablebinary node3, scrape, enablebinary в finally;
+- финальная проверка статуса, результаты comparison-results.json: success=true.
+Отдельный CQL-probe тест: disablebinary, ожидание 20 секунд для Casspoke, сравнение
+с nodetool и gossip active, enablebinary. Состояние после: три healthy / UN,
+все cassandra_up=1, CQL statusbinary=running, SELECT с CONSISTENCY ALL успешен.
+Joining/leaving/moving и асимметричная network partition НЕ моделировались.
+Prometheus server не запускался; HTTP exposition проверена напрямую.
+
+HTTP-измерения (медиана 3 запросов, здоровый маленький кластер)
+===========================================================
+Instaclustr agent:        26.4 ms, 10 307 samples, 187 output names, ~2.55 MB.
+Instaclustr standalone: 1255.5 ms, 10 315 samples, 187 output names, ~2.55 MB.
+JMX standalone:         4184.4 ms, 50 069 samples, 352 output names, ~6.15 MB.
+Criteo:                  33.1 ms,  9 053 samples,   1 generic name, ~1.60 MB.
+MCAC:                    64.0 ms, 35 339 samples,  78 output names, ~7.76 MB.
+Criteo status-only:       3.5 ms,     13 samples,   1 generic name (отдельный узкий конфиг).
+
+Это время отдачи /metrics, а не стоимость фонового сбора и не CPU overhead.
+MCAC и Criteo отдают кэш, JMX опрашивает на scrape, Instaclustr режимы различаются.
+Охват несопоставим: JMX catch-all захватывает много дубликатов/alias metrics,
+MCAC также OS metrics. Количество output names не равно числу полезных семейств.
+Нельзя заключать "MCAC быстрее JMX в 65 раз" или выбирать продукт по этой таблице.
+Не измерялись нагрузка, тысячи таблиц, длительная стабильность, memory leak и p99.
+
+Нюанс установки двух javaagent
+============================
+Первоначальный порядок MCAC -> Instaclustr аварийно завершил JVM:
+MBeanServerInterceptors are disabled. Причина — инициализация MBeanServer до того,
+как Instaclustr задаёт builder.initial. Порядок Instaclustr -> MCAC успешно работает.
+Это наблюдение о совместном запуске, не доказательство отказа каждого агента отдельно.
+Стенд оставлен в успешной конфигурации; восстановление из данных подтверждено.
+
+Зрелость
+========
+Для оценки использованы поддержка/архивирование, последние релизы, способ установки,
+семантика метрик, воспроизведённые дефекты и необходимость дополнительных компонентов.
+Звёзды и pushed_at сами по себе не доказывают production-качество; pushed_at может
+включать документацию и служебные изменения. Даты взяты GitHub API, сохранены рядом.
+
+Источники
+=========
+https://github.com/prometheus/jmx_exporter/releases/tag/1.7.0
+https://github.com/instaclustr/cassandra-exporter/releases/tag/v0.9.14
+https://github.com/zegelin/cassandra-exporter
+https://github.com/criteo/cassandra_exporter/releases/tag/2.3.8
+https://github.com/datastax/metric-collector-for-apache-cassandra/releases/tag/v0.3.6
+https://github.com/k8ssandra/management-api-for-apache-cassandra/releases/tag/v0.1.128
+https://docs.k8ssandra.io/tasks/monitor/metrics-endpoints/
+https://github.com/suhailpatel/seastat
+https://github.com/criteo/casspoke/releases/tag/1.3.6
+https://github.com/sarma1807/cass-prom-file-exporter
+https://github.com/rustyrazorblade/cassandra-prometheus-exporter
+https://axonops.com/docs/monitoring/overview/
+https://axonops.com/docs/monitoring/grafana/grafana/

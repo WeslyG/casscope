@@ -1,0 +1,12 @@
+host: localhost:7199
+ssl: false
+listenAddress: 0.0.0.0
+listenPort: 9502
+blacklist:
+  - 'java:lang:memorypool:.*usagethreshold.*'
+  - 'org:apache:cassandra:db:.*'
+  - 'org:apache:cassandra:metrics:columnfamily:.*'
+  - 'org:apache:cassandra:metrics:[^:]+:system[^:]*:.*'
+  - 'com:criteo:nosql:cassandra:exporter:.*'
+maxScrapFrequencyInSec:
+  10: ['.*']

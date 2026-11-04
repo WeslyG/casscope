@@ -68,3 +68,33 @@ downtime. Полного состояния кольца N/J/L/M exporter не �
 нужен отдельный exporter/scrape target на каждом узле; установлен один для проверки.
 Также обнаружен дефект разбора scope `IP_7000`: часть Connection-метрик, включая
 GossipMessageCompletedTasks, пропускается с предупреждениями в логе exporter.
+
+## Сравнение exporter на Cassandra 4.1.12
+
+Полный обзор: `research/exporter-comparison.txt`. Измерения:
+`research/comparison-results.json`; доказательства fault tests:
+`research/comparison-evidence.txt`. Полные `.prom` snapshots остаются локально
+в `research/` и не включаются в Git. Версии и SHA256 зафиксированы рядом.
+
+В текущем стенде node2 запускает MCAC 0.3.6-4.1-beta1 и Instaclustr agent 0.9.14.
+На node1 подключены standalone Instaclustr, JMX Exporter 1.7.0, Criteo 2.3.8
+и Casspoke 1.3.6. Два javaagent на node2 используются для сравнения, не как
+рекомендация совместного production-развёртывания. Порядок агентов важен.
+
+Воспроизведение с хоста:
+
+```bash
+python monitoring/download-comparison.py
+docker compose -f compose.yaml -f compose.monitoring.yaml -f compose.comparison.yaml up -d --build --wait --wait-timeout 900
+python monitoring/compare.py
+python monitoring/summarize.py
+```
+
+Отдельный тест Casspoke с ожиданием реакции на отключение CQL:
+`pwsh -File monitoring/probe-test.ps1` с хоста.
+
+На Windows использовать `py -3` вместо `python`. Fault tests автоматически
+приостанавливают node3 и отключают его CQL, затем восстанавливают в `finally`.
+Запускать только на этом учебном стенде. Casspoke выполняет CQL read/write probes.
+Базовый `docker compose up` без overrides вернёт node2 к образу без агентов;
+для сохранения сравнительного окружения использовать все три Compose-файла.

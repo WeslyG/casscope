@@ -1,0 +1,9 @@
+app:
+  measurementPeriodInSec: 5
+  timeoutInSec: 5
+  refreshDiscoveryPeriodInSec: 60
+  httpServerPort: 9504
+discovery:
+  dns:
+    - clustername: cassandra-lab
+      host: 127.0.0.1:9042

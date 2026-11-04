@@ -1,0 +1,10 @@
+{
+  "name": "Cassandra lab — Ansible 14",
+  "image": "ansible-infra:ansible14-2026.11.04",
+  "remoteUser": "vscode",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/cassandra-lab,type=bind",
+  "workspaceFolder": "/workspaces/cassandra-lab",
+  "mounts": ["source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"],
+  "overrideCommand": true,
+  "customizations": {"vscode": {"extensions": ["redhat.ansible", "ms-azuretools.vscode-docker"]}}
+}

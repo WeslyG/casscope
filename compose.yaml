@@ -1,0 +1,55 @@
+name: cassandra-lab
+
+x-cassandra: &cassandra
+  image: cassandra:4.1.12@sha256:b877532a79865d0212c860352bb9c3b0be97db9628a662ea815fb90ea4033158
+  restart: unless-stopped
+  mem_limit: 2g
+  environment: &environment
+    CASSANDRA_CLUSTER_NAME: cassandra-lab
+    CASSANDRA_SEEDS: cassandra1
+    CASSANDRA_DC: dc1
+    CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+    CASSANDRA_NUM_TOKENS: 16
+    MAX_HEAP_SIZE: 1G
+    HEAP_NEWSIZE: 256M
+  healthcheck:
+    test: [CMD-SHELL, "cqlsh -e 'SELECT release_version FROM system.local' >/dev/null 2>&1"]
+    interval: 20s
+    timeout: 15s
+    retries: 30
+    start_period: 60s
+
+services:
+  cassandra1:
+    <<: *cassandra
+    hostname: cassandra1
+    environment:
+      <<: *environment
+      CASSANDRA_RACK: rack1
+    ports: ["127.0.0.1:9042:9042"]
+    volumes: ["data1:/var/lib/cassandra"]
+  cassandra2:
+    <<: *cassandra
+    hostname: cassandra2
+    environment:
+      <<: *environment
+      CASSANDRA_RACK: rack2
+    depends_on:
+      cassandra1:
+        condition: service_healthy
+    volumes: ["data2:/var/lib/cassandra"]
+  cassandra3:
+    <<: *cassandra
+    hostname: cassandra3
+    environment:
+      <<: *environment
+      CASSANDRA_RACK: rack3
+    depends_on:
+      cassandra2:
+        condition: service_healthy
+    volumes: ["data3:/var/lib/cassandra"]
+
+volumes:
+  data1:
+  data2:
+  data3:

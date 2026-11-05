@@ -1,5 +1,16 @@
 # Cassandra lab
 
+## Новый membership exporter
+
+Реализован первый Java-8-совместимый MVP: [исходники и ограничения](membership-exporter/README.md),
+[конфиг](membership-exporter/exporter.yaml). Обычный JAR запускается существующей
+Java Cassandra, Docker на целевой машине не нужен. Эксплуатационная интеграция не добавлялась.
+
+Защита нагрузки: один batch JMX read за цикл, пауза 30 секунд, backoff при
+замедлении/ошибках, отсутствие дополнительных JMX-чтений при HTTP scrape;
+при socket timeout — остановка опроса до перезапуска exporter.
+Лабораторные доказательства: `research/membership-validation/`.
+
 Локальный кластер Cassandra 4.1.12: три узла, dc1, три rack, постоянные Docker volumes.
 Контроллер — готовый devcontainer Ansible 14 (`ansible-infra:ansible14-2026.11.04`).
 Docker CLI внутри контроллера использует сокет Docker хоста.

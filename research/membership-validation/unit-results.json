@@ -1,0 +1,23 @@
+[
+  {
+    "suite": "local.cassandra.membership.JmxHttpTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "local.cassandra.membership.LoadProtectionTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  {
+    "suite": "local.cassandra.membership.ModelTest",
+    "tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+]

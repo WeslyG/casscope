@@ -1,0 +1,15 @@
+cluster: cassandra-lab
+observer: cassandra1
+jmx_url: service:jmx:rmi:///jndi/rmi://127.0.0.1:7199/jmxrmi
+listen_address: 127.0.0.1
+port: 9505
+# One batch read per cycle, no per-endpoint RPC. Minimum interval: 15 seconds.
+poll_interval_seconds: 30
+max_backoff_seconds: 300
+socket_timeout_ms: 3000
+slow_poll_ms: 1000
+stale_after_seconds: 90
+max_endpoints: 1000
+# Optional credentials: supply names of environment variables, never CLI passwords.
+# username_env: CASSANDRA_JMX_USER
+# password_env: CASSANDRA_JMX_PASSWORD

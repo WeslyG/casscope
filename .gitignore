@@ -4,3 +4,4 @@
 /research/*-src/
 /research/*.prom
 /research/Status-*.java
+/membership-exporter/target/

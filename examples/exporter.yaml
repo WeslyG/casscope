@@ -1,0 +1,15 @@
+cluster: production
+# Stable identifier of the Cassandra node observed by this process.
+observer: cassandra-01
+jmx_url: service:jmx:rmi:///jndi/rmi://127.0.0.1:7199/jmxrmi
+listen_address: 127.0.0.1
+port: 9505
+poll_interval_seconds: 30
+max_backoff_seconds: 300
+socket_timeout_ms: 3000
+slow_poll_ms: 1000
+stale_after_seconds: 90
+max_endpoints: 1000
+# Both names are required when authentication is enabled.
+# username_env: CASSCOPE_JMX_USER
+# password_env: CASSCOPE_JMX_PASSWORD

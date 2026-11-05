@@ -4,13 +4,20 @@ import json
 import pathlib
 import subprocess
 import time
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+import uuid
 
 root=pathlib.Path(__file__).resolve().parent
-out=root.parent/'research/membership-validation'
-out.mkdir(exist_ok=True)
+run_id=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-runtime-'+uuid.uuid4().hex[:8]
+out=root.parent/'.artifacts'/'casscope'/run_id
+out.mkdir(parents=True)
+print('Artifacts: '+str(out),flush=True)
 configs=root/'target/matrix'
 configs.mkdir(exist_ok=True)
-results={'jar_sha256':hashlib.sha256((root/'target/cassandra-membership-exporter.jar').read_bytes()).hexdigest(),'runtimes':{}}
+version=ET.parse(root/'pom.xml').findtext('{http://maven.apache.org/POM/4.0.0}version')
+jar_name=f'casscope-{version}.jar'
+results={'jar_sha256':hashlib.sha256((root/'target'/jar_name).read_bytes()).hexdigest(),'runtimes':{}}
 started=[]
 def run(*args):
     return subprocess.run(['docker',*args],capture_output=True,text=True,encoding='utf-8',timeout=100,check=True)
@@ -22,7 +29,7 @@ try:
         name=f'cassandra-lab-membership-java{version}'
         run('run','-d','--name',name,'--network','container:cassandra-lab-cassandra1-1','--memory','128m','--cpus','0.25',
             '--mount',f'type=bind,source={root},target=/exporter,readonly',f'eclipse-temurin:{version}-jre',
-            'java','-Xms16m','-Xmx64m','-jar','/exporter/target/cassandra-membership-exporter.jar','--config',f'/exporter/target/matrix/java{version}.yaml')
+            'java','-Xms16m','-Xmx64m','-jar',f'/exporter/target/{jar_name}','--config',f'/exporter/target/matrix/java{version}.yaml')
         started.append(name)
         results['runtimes'][str(version)]={'version':run('exec',name,'java','-version').stderr.strip()}
     for version in (8,17,21):

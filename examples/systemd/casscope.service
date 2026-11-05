@@ -1,0 +1,23 @@
+[Unit]
+Description=Casscope Cassandra membership exporter
+After=network.target
+
+[Service]
+Type=simple
+User=casscope
+Group=casscope
+WorkingDirectory=/opt/casscope
+# Replace /usr/bin/java with the exact Java executable used by Cassandra if needed.
+ExecStart=/usr/bin/java -Xms16m -Xmx64m -jar /opt/casscope/casscope.jar --config /etc/casscope/exporter.yaml
+EnvironmentFile=-/etc/casscope/casscope.env
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=15s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

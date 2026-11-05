@@ -1,111 +1,84 @@
-# Cassandra lab
+# Casscope
 
-## Новый membership exporter
+Casscope экспортирует в Prometheus доступность и состояние узлов Cassandra **глазами каждого наблюдателя**. Читает JMX/RMI и работает отдельным Java-процессом рядом с Cassandra.
 
-Реализован первый Java-8-совместимый MVP: [исходники и ограничения](membership-exporter/README.md),
-[конфиг](membership-exporter/exporter.yaml). Обычный JAR запускается существующей
-Java Cassandra, Docker на целевой машине не нужен. Эксплуатационная интеграция не добавлялась.
+- Независимые состояния: `up/down/unknown` и `normal/joining/leaving/moving/unknown`.
+- Локальные признаки работы gossip, native transport и инициализации.
+- Контроль свежести, ошибок и частоты опроса.
+- Один исполняемый JAR; Docker и дополнительная Java на целевой машине не требуются.
 
-Защита нагрузки: один batch JMX read за цикл, пауза 30 секунд, backoff при
-замедлении/ошибках, отсутствие дополнительных JMX-чтений при HTTP scrape;
-при socket timeout — остановка опроса до перезапуска exporter.
-Лабораторные доказательства: `research/membership-validation/`.
+## Требования
 
-Локальный кластер Cassandra 4.1.12: три узла, dc1, три rack, постоянные Docker volumes.
-Контроллер — готовый devcontainer Ansible 14 (`ansible-infra:ansible14-2026.11.04`).
-Docker CLI внутри контроллера использует сокет Docker хоста.
+- Существующий Java runtime Cassandra, **Java 8 или новее**, с JMX/RMI и встроенным HTTP server.
+- Доступ к JMX наблюдаемой Cassandra, обычно `127.0.0.1:7199`.
+- Контракт MBeans практически проверен на **Apache Cassandra 4.1.12**. Поддержка других Cassandra major не заявляется.
+- Базовый запуск проверен на Linux с Java 8/11/17/21; это не гарантия всех vendor/OS/TLS-конфигураций.
 
-Открытие в VS Code: **Dev Containers: Reopen in Container**.
+## Запуск
 
-В терминале devcontainer, каталог `/workspaces/cassandra-lab`:
+Скачайте `casscope-1.0.0.jar` из [Releases](https://github.com/WeslyG/casscope/releases) и скопируйте [пример конфигурации](examples/exporter.yaml).
 
-```bash
-docker compose up -d --wait --wait-timeout 900
-docker compose ps
-docker compose exec cassandra1 nodetool status
-docker compose exec cassandra1 cqlsh
-docker compose exec -T cassandra1 cqlsh --request-timeout=120 < schema.cql
-docker compose exec cassandra1 nodetool describecluster
-docker compose exec -T cassandra1 cqlsh --request-timeout=60 < smoke.cql
-docker compose logs --tail=100 cassandra1
-docker compose stop
-docker compose start
+```sh
+/path/to/cassandra-java/bin/java -Xms16m -Xmx64m \
+  -jar casscope-1.0.0.jar --config exporter.yaml
 ```
 
-Запущенный контроллер называется `cassandra-lab-devcontainer`. Вход с хоста:
+Используйте тот же путь к `java`, который уже используется Cassandra. Это отдельный процесс, а не javaagent; перезапуск Cassandra для установки Casscope при доступном JMX не требуется.
 
-```bash
-docker exec -it -u vscode -w /workspaces/cassandra-lab cassandra-lab-devcontainer bash
+```sh
+java -jar casscope-1.0.0.jar --version
+curl http://127.0.0.1:9505/metrics
 ```
 
-После `schema.cql` дождаться единой schema version для всех трёх узлов в
-`nodetool describecluster`, затем запускать `smoke.cql`. Первичное распространение
-схемы на этом Docker-хосте может занимать несколько минут.
-`smoke.cql` проверяет запись/чтение с RF=3 и CONSISTENCY ALL. В `lab_smoke.probe`
-остаётся одна тестовая строка `1, ready`.
+HTTP по умолчанию слушает только loopback. Для удалённого Prometheus задайте нужный `listen_address` и ограничьте сетевой доступ. Встроенные authentication/TLS HTTP в Casscope не настроены.
 
-CQL доступен с хоста на `127.0.0.1:9042`; внутри Docker сети — `cassandra1:9042`.
-Для клиентского доступа из devcontainer можно пользоваться `docker compose exec cassandra1 cqlsh`.
-Это локальное учебное окружение без аутентификации и TLS. На каждый узел установлен
-лимит 2 ГБ RAM и heap 1 ГБ. Данные сохраняются при остановке и `docker compose down`.
-`docker compose down -v` удаляет данные: запускать только при намеренном сбросе.
+## Принцип работы и нагрузка
 
-Образ Cassandra: https://hub.docker.com/_/cassandra
+Один фоновый poller читает девять атрибутов `StorageService` одним `getAttributes`: пять списков membership и четыре локальных атрибута. Результат публикуется как immutable snapshot. `/metrics` читает только этот snapshot и не обращается к Cassandra.
 
-## Проверка exporter
+По умолчанию следующий цикл начинается через **30 секунд после завершения предыдущего**, с положительным jitter до 10%. Интервалы меньше 15 секунд отклоняются. Нет запросов на каждого endpoint, token maps, table metrics, ownership, полного сканирования MBeans и управляющих операций.
 
-Установлен Instaclustr cassandra-exporter 0.9.14 в standalone-режиме для cassandra1.
-Он работает в сетевом пространстве узла и читает локальный JMX без изменения
-настроек JMX Cassandra. Метрики слушают порт 9500 внутри этого пространства;
-на хост порт не опубликован. Prometheus не устанавливался.
+При ошибке или медленном успешном чтении задержка увеличивается до 300 секунд. Пропущенные циклы не догоняются; параллельные poll workers не создаются. При socket timeout circuit открывается: **новые опросы прекращаются до перезапуска Casscope**. Таймаут клиента не отменяет уже начатую работу на Cassandra, поэтому бесконечные автоматические повторы здесь запрещены.
 
-Воспроизводимый запуск (Python на хосте либо внутри devcontainer):
+Это ограничивает нагрузку, но не делает чтение бесплатным: списки растут с размером кластера. `jmx_reads_total` считает application-вызовы, а не весь RMI protocol/reconnect-трафик.
 
-```bash
-python monitoring/download-exporter.py
-docker compose -f compose.yaml -f compose.monitoring.yaml up -d --build --no-deps exporter
+## Конфигурация и метрики
+
+Все параметры, defaults и ограничения описаны в [configuration.md](docs/configuration.md).
+
+Метрики имеют prefix `cassandra_membership_` и labels `cluster`, `observer`; endpoint-метрики также содержат IP и storage port в `endpoint`.
+
+```text
+cassandra_membership_endpoint_status{cluster="production",observer="cassandra-01",endpoint="10.0.0.2:7000",status="down"} 1
+cassandra_membership_endpoint_ring_state{cluster="production",observer="cassandra-01",endpoint="10.0.0.2:7000",state="normal"} 1
 ```
 
-Чтение метрик с хоста:
+Для status/state публикуется полный набор значений 0/1. Состояние кольца независимо от доступности: например, DOWN не стирает JOINING. Разные observer описывают свои представления; их нельзя заранее сводить к одному глобальному UP/DOWN.
 
-```bash
-docker exec cassandra-lab-cassandra1-1 python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:9500/metrics').read().decode())"
+При ошибке опроса или устаревании snapshot endpoint-series не публикуются. Это **не массовый DOWN**. Проверяйте `collection_success`, `snapshot_age_seconds`, `circuit_open` и доступность самого HTTP endpoint.
+
+`/-/healthy` проверяет HTTP-процесс, а не Cassandra. Gossip UP не гарантирует доступность CQL или корректность репликации; клиентская CQL-проверка выполняется отдельно. Не считайте собственное мнение узла о себе независимым подтверждением его доступности.
+
+## systemd
+
+Готовый пример: [casscope.service](examples/systemd/casscope.service). Установка и важные особенности перезапуска: [systemd.md](docs/systemd.md).
+
+## Разработка
+
+Исходники Java и Maven Wrapper находятся в `membership-exporter/`. Для сборки нужен JDK; рекомендуется JDK 17, результат компилируется с `--release 8`.
+
+```sh
+cd membership-exporter
+./mvnw -B -ntp clean verify
+java -jar target/casscope-1.0.0.jar --version
 ```
 
-Проверка паузой cassandra3 подтвердила `endpoint_active: 1 → 0 → 1`, рост phi и
-downtime. Полного состояния кольца N/J/L/M exporter не отдаёт. Подробности и
-границы проверки: `research/exporter-investigation.txt`; сырые выборки endpoint
-метрик и nodetool status сохранены рядом. Для мониторинга глазами каждого узла
-нужен отдельный exporter/scrape target на каждом узле; установлен один для проверки.
-Также обнаружен дефект разбора scope `IP_7000`: часть Connection-метрик, включая
-GossipMessageCompletedTasks, пропускается с предупреждениями в логе exporter.
+На Windows используется `mvnw.cmd`. Тесты включают настоящий локальный JMX/RMI server, HTTP scrape, timeout и проверки ограничения запросов; внешний кластер Cassandra не требуется.
 
-## Сравнение exporter на Cassandra 4.1.12
+[development.md](docs/development.md) описывает структуру кода, правила изменения collectors, проверки и сборку релиза. Конфиги, изменения рабочего дерева и измеренные результаты лабораторных испытаний сохраняйте отдельно; `.artifacts/` исключён из Git.
 
-Полный обзор: `research/exporter-comparison.txt`. Измерения:
-`research/comparison-results.json`; доказательства fault tests:
-`research/comparison-evidence.txt`. Полные `.prom` snapshots остаются локально
-в `research/` и не включаются в Git. Версии и SHA256 зафиксированы рядом.
+## Релизы
 
-В текущем стенде node2 запускает MCAC 0.3.6-4.1-beta1 и Instaclustr agent 0.9.14.
-На node1 подключены standalone Instaclustr, JMX Exporter 1.7.0, Criteo 2.3.8
-и Casspoke 1.3.6. Два javaagent на node2 используются для сравнения, не как
-рекомендация совместного production-развёртывания. Порядок агентов важен.
+GitHub Actions запускает тесты на Java **8/11/17/21** для pull request, push в `main` и тегов `v*`. Публикация выполняется только для тега, совпадающего с версией проекта, например `v1.0.0`.
 
-Воспроизведение с хоста:
-
-```bash
-python monitoring/download-comparison.py
-docker compose -f compose.yaml -f compose.monitoring.yaml -f compose.comparison.yaml up -d --build --wait --wait-timeout 900
-python monitoring/compare.py
-python monitoring/summarize.py
-```
-
-Отдельный тест Casspoke с ожиданием реакции на отключение CQL:
-`pwsh -File monitoring/probe-test.ps1` с хоста.
-
-На Windows использовать `py -3` вместо `python`. Fault tests автоматически
-приостанавливают node3 и отключают его CQL, затем восстанавливают в `finally`.
-Запускать только на этом учебном стенде. Casspoke выполняет CQL read/write probes.
-Базовый `docker compose up` без overrides вернёт node2 к образу без агентов;
-для сохранения сравнительного окружения использовать все три Compose-файла.
+После успеха всех тестов публикуется **один загружаемый asset: `casscope-1.0.0.jar`**. Архивы, конфиги, test reports и результаты экспериментов в release assets не добавляются. Полные Cassandra e2e в release workflow не запускаются.

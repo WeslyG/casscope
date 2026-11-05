@@ -1,0 +1,97 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: casscope-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test Java ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['8', '11', '17', '21']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+          cache-dependency-path: membership-exporter/pom.xml
+      - name: Validate version and tag
+        id: version
+        run: |
+          version=$(python3 scripts/check_release.py)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Build and test (no Cassandra e2e)
+        working-directory: membership-exporter
+        run: ./mvnw -B -ntp clean verify
+      - name: Check packaged version and Java 8 bytecode
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 scripts/check_release.py --jar "membership-exporter/target/casscope-${VERSION}.jar"
+          test "$(java -jar "membership-exporter/target/casscope-${VERSION}.jar" --version)" = "Casscope ${VERSION}"
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tests-java-${{ matrix.java }}
+          path: membership-exporter/target/surefire-reports/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Preserve release JAR
+        if: matrix.java == '17'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: casscope-release
+          path: membership-exporter/target/casscope-${{ steps.version.outputs.version }}.jar
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Publish JAR
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: casscope-release
+          path: release/
+      - name: Publish only the tested JAR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(python3 scripts/check_release.py)
+          jar="release/casscope-${version}.jar"
+          python3 scripts/check_release.py --jar "$jar"
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 1
+          printf 'Standalone Casscope %s. See the repository README for configuration and runtime requirements.\n' "$version" > "$RUNNER_TEMP/release-notes.txt"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Casscope ${version}" --notes-file "$RUNNER_TEMP/release-notes.txt"
+          gh release upload "$GITHUB_REF_NAME" "$jar"
+          assets=$(gh api "repos/${GH_REPO}/releases/tags/${GITHUB_REF_NAME}" --jq '[.assets[].name] | join("\n")')
+          test "$assets" = "casscope-${version}.jar"
+          gh release edit "$GITHUB_REF_NAME" --draft=false

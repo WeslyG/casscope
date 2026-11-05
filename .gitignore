@@ -5,3 +5,4 @@
 /research/*.prom
 /research/Status-*.java
 /membership-exporter/target/
+/.artifacts/

@@ -8,8 +8,12 @@ import java.util.logging.Logger;
 
 public final class Main {
     public static void main(String[] args) throws Exception {
+        if(args.length==1 && "--version".equals(args[0])) {
+            String version=Main.class.getPackage().getImplementationVersion();
+            System.out.println("Casscope "+(version==null?"development":version));return;
+        }
         if(args.length!=2 || !"--config".equals(args[0])) {
-            System.err.println("Usage: java -jar cassandra-membership-exporter.jar --config exporter.yaml");
+            System.err.println("Usage: java -jar casscope-<version>.jar --config exporter.yaml | --version");
             System.exit(2);return;
         }
         Config config=Config.load(Paths.get(args[1]));
@@ -21,7 +25,7 @@ public final class Main {
         },new ThreadPoolExecutor.AbortPolicy());
         HTTPServer server=HTTPServer.builder().hostname(config.listenAddress).port(config.port).registry(registry).executorService(http).buildAndStart();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {poller.close();server.close();http.shutdownNow();},"membership-shutdown"));
-        poller.start();Logger.getLogger(Main.class.getName()).info("Membership exporter started; one background JMX poller, HTTP serves snapshots only");
+        poller.start();Logger.getLogger(Main.class.getName()).info("Casscope started; one background JMX poller, HTTP serves snapshots only");
         new CountDownLatch(1).await();
     }
 }

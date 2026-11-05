@@ -7,10 +7,15 @@ import re
 import subprocess
 import time
 import zipfile
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parent
-OUT = ROOT.parent / 'research' / 'membership-validation'
-OUT.mkdir(exist_ok=True)
+run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-lab-' + uuid.uuid4().hex[:8]
+OUT = ROOT.parent / '.artifacts' / 'casscope' / run_id
+OUT.mkdir(parents=True)
+print('Artifacts: ' + str(OUT), flush=True)
 
 def docker(*args):
     return subprocess.check_output(['docker', *args], text=True, encoding='utf-8', timeout=100)
@@ -31,7 +36,8 @@ def wait_for(predicate, timeout=80):
     raise AssertionError('Expected metric state did not arrive')
 
 result={}
-jar=ROOT/'target/cassandra-membership-exporter.jar'
+version=ET.parse(ROOT/'pom.xml').findtext('{http://maven.apache.org/POM/4.0.0}version')
+jar=ROOT/'target'/f'casscope-{version}.jar'
 result['jar_sha256']=hashlib.sha256(jar.read_bytes()).hexdigest()
 with zipfile.ZipFile(jar) as z:
     versions={name:int.from_bytes(z.read(name)[6:8], 'big') for name in z.namelist()

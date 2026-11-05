@@ -90,8 +90,17 @@ jobs:
           python3 scripts/check_release.py --jar "$jar"
           test "$(find release -maxdepth 1 -type f | wc -l)" -eq 1
           printf 'Standalone Casscope %s. See the repository README for configuration and runtime requirements.\n' "$version" > "$RUNNER_TEMP/release-notes.txt"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Casscope ${version}" --notes-file "$RUNNER_TEMP/release-notes.txt"
-          gh release upload "$GITHUB_REF_NAME" "$jar"
-          assets=$(gh api "repos/${GH_REPO}/releases/tags/${GITHUB_REF_NAME}" --jq '[.assets[].name] | join("\n")')
+          if ! gh release view "$GITHUB_REF_NAME" --json databaseId,isDraft > "$RUNNER_TEMP/release.json"; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Casscope ${version}" --notes-file "$RUNNER_TEMP/release-notes.txt"
+            gh release view "$GITHUB_REF_NAME" --json databaseId,isDraft > "$RUNNER_TEMP/release.json"
+          fi
+          # Only our unfinished draft may be resumed. Never replace a published asset.
+          test "$(jq -r '.isDraft' "$RUNNER_TEMP/release.json")" = true
+          release_id=$(jq -r '.databaseId' "$RUNNER_TEMP/release.json")
+          gh release upload "$GITHUB_REF_NAME" "$jar" --clobber
+          # The tag endpoint does not resolve unpublished drafts. Address the draft by ID.
+          assets=$(gh api "repos/${GH_REPO}/releases/${release_id}" --jq '[.assets[].name] | join("\n")')
           test "$assets" = "casscope-${version}.jar"
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release download "$GITHUB_REF_NAME" --pattern "casscope-${version}.jar" --dir "$RUNNER_TEMP/verify-release"
+          test "$(sha256sum "$jar" | cut -d' ' -f1)" = "$(sha256sum "$RUNNER_TEMP/verify-release/casscope-${version}.jar" | cut -d' ' -f1)"
+          gh api --method PATCH "repos/${GH_REPO}/releases/${release_id}" -F draft=false --jq '.html_url'

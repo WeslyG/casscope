@@ -1,0 +1,9 @@
+---
+- name: Verify archived recovery assertions
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require completed protocol and passing assertions
+      ansible.builtin.command:
+        argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", verify]
+      changed_when: false

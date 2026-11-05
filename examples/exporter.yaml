@@ -6,6 +6,8 @@ listen_address: 127.0.0.1
 port: 9505
 poll_interval_seconds: 30
 max_backoff_seconds: 300
+timeout_retry_seconds: 60
+max_timeout_backoff_seconds: 900
 socket_timeout_ms: 3000
 slow_poll_ms: 1000
 stale_after_seconds: 90

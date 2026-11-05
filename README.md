@@ -16,17 +16,17 @@ Casscope экспортирует в Prometheus доступность и сос
 
 ## Запуск
 
-Скачайте `casscope-1.0.0.jar` из [Releases](https://github.com/WeslyG/casscope/releases) и скопируйте [пример конфигурации](examples/exporter.yaml).
+Текущая версия — **1.1.0**. Опубликованные JAR доступны в [Releases](https://github.com/WeslyG/casscope/releases). Используйте конфигурацию и документацию своей версии JAR. Пример: [exporter.yaml](examples/exporter.yaml).
 
 ```sh
 /path/to/cassandra-java/bin/java -Xms16m -Xmx64m \
-  -jar casscope-1.0.0.jar --config exporter.yaml
+  -jar casscope-1.1.0.jar --config exporter.yaml
 ```
 
 Используйте тот же путь к `java`, который уже используется Cassandra. Это отдельный процесс, а не javaagent; перезапуск Cassandra для установки Casscope при доступном JMX не требуется.
 
 ```sh
-java -jar casscope-1.0.0.jar --version
+java -jar casscope-1.1.0.jar --version
 curl http://127.0.0.1:9505/metrics
 ```
 
@@ -38,7 +38,9 @@ HTTP по умолчанию слушает только loopback. Для уда
 
 По умолчанию следующий цикл начинается через **30 секунд после завершения предыдущего**, с положительным jitter до 10%. Интервалы меньше 15 секунд отклоняются. Нет запросов на каждого endpoint, token maps, table metrics, ownership, полного сканирования MBeans и управляющих операций.
 
-При ошибке или медленном успешном чтении задержка увеличивается до 300 секунд. Пропущенные циклы не догоняются; параллельные poll workers не создаются. При socket timeout circuit открывается: **новые опросы прекращаются до перезапуска Casscope**. Таймаут клиента не отменяет уже начатую работу на Cassandra, поэтому бесконечные автоматические повторы здесь запрещены.
+При ошибке или медленном успешном чтении задержка увеличивается до 300 секунд. Пропущенные циклы не догоняются; параллельные poll workers не создаются. Socket timeout открывает circuit: первая автоматическая проба не раньше 60 секунд, следующие неудачи увеличивают паузу до 900 секунд. Jitter положительный; HTTP не ускоряет пробы. Успешная проба восстанавливает сбор без restart.
+
+Таймаут клиента не подтверждает завершение серверной работы. Экспортер ограничивает частоту новых попыток и число своих выполняющихся циклов, но не гарантирует отмену оставшейся работы внутри Cassandra. Если текущий worker ещё не вернулся, второй не создаётся.
 
 Это ограничивает нагрузку, но не делает чтение бесплатным: списки растут с размером кластера. `jmx_reads_total` считает application-вызовы, а не весь RMI protocol/reconnect-трафик.
 
@@ -55,9 +57,9 @@ cassandra_membership_endpoint_ring_state{cluster="production",observer="cassandr
 
 Для status/state публикуется полный набор значений 0/1. Состояние кольца независимо от доступности: например, DOWN не стирает JOINING. Разные observer описывают свои представления; их нельзя заранее сводить к одному глобальному UP/DOWN.
 
-При ошибке опроса или устаревании snapshot endpoint-series не публикуются. Это **не массовый DOWN**. Проверяйте `collection_success`, `snapshot_age_seconds`, `circuit_open` и доступность самого HTTP endpoint.
+`/metrics` возвращает **200** с диагностикой экспортера и метрикой `cassandra_membership_collection_success`. До первого снимка, при ошибке опроса, устаревании snapshot или зависшем worker она равна **0**; состояния Cassandra из старого снимка не выдаются. Возраст последнего успеха, ошибки, circuit и время до retry остаются доступны через тот же endpoint. Для мониторинга достаточно одного scrape job. `/-/ready` проверяет свежесть сбора и при её отсутствии возвращает 503.
 
-`/-/healthy` проверяет HTTP-процесс, а не Cassandra. Gossip UP не гарантирует доступность CQL или корректность репликации; клиентская CQL-проверка выполняется отдельно. Не считайте собственное мнение узла о себе независимым подтверждением его доступности.
+`/-/healthy` проверяет только живость процесса. Prometheus `up=1` означает успешный HTTP-scrape; успешность сбора Cassandra определяется отдельно через collection_success. Свежий снимок с DOWN либо native_transport_running=0 остаётся валидным: collection_success=1, аварийные значения публикуются. Gossip UP не гарантирует доступность CQL или корректность репликации. Подключите [scrape config](examples/prometheus/prometheus.yml) и [alerts](examples/prometheus/casscope-alerts.yml), учитывающие как up=0, так и collection_success=0.
 
 ## systemd
 
@@ -70,15 +72,15 @@ cassandra_membership_endpoint_ring_state{cluster="production",observer="cassandr
 ```sh
 cd membership-exporter
 ./mvnw -B -ntp clean verify
-java -jar target/casscope-1.0.0.jar --version
+java -jar target/casscope-1.1.0.jar --version
 ```
 
 На Windows используется `mvnw.cmd`. Тесты включают настоящий локальный JMX/RMI server, HTTP scrape, timeout и проверки ограничения запросов; внешний кластер Cassandra не требуется.
 
-[development.md](docs/development.md) описывает структуру кода, правила изменения collectors, проверки и сборку релиза. Конфиги, изменения рабочего дерева и измеренные результаты лабораторных испытаний сохраняйте отдельно; `.artifacts/` исключён из Git.
+[development.md](docs/development.md) описывает структуру кода, правила изменения collectors, проверки и сборку релиза. Измеренные результаты лабораторных испытаний сохраняйте отдельно; `.artifacts/` исключён из Git.
 
 ## Релизы
 
-GitHub Actions запускает тесты на Java **8/11/17/21** для pull request, push в `main` и тегов `v*`. Публикация выполняется только для тега, совпадающего с версией проекта, например `v1.0.0`.
+GitHub Actions запускает тесты на Java **8/11/17/21** для pull request, push в `main` и тегов `v*`. Публикация выполняется только для тега, совпадающего с версией проекта, например `v1.1.0`.
 
-После успеха всех тестов публикуется **один загружаемый asset: `casscope-1.0.0.jar`**. Архивы, конфиги, test reports и результаты экспериментов в release assets не добавляются. Полные Cassandra e2e в release workflow не запускаются.
+После успеха всех тестов публикуется **один загружаемый asset: `casscope-1.1.0.jar`**. Архивы, конфиги, test reports и результаты экспериментов в release assets не добавляются. Полные Cassandra e2e в release workflow не запускаются.

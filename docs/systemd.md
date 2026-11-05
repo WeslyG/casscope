@@ -18,7 +18,7 @@
 ```sh
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin casscope
 sudo install -d -o root -g casscope -m 0750 /opt/casscope /etc/casscope
-sudo install -o root -g casscope -m 0640 casscope-1.0.0.jar /opt/casscope/casscope.jar
+sudo install -o root -g casscope -m 0640 casscope-1.1.0.jar /opt/casscope/casscope.jar
 sudo install -o root -g casscope -m 0640 examples/exporter.yaml /etc/casscope/exporter.yaml
 sudo install -m 0644 examples/systemd/casscope.service /etc/systemd/system/casscope.service
 ```
@@ -48,13 +48,15 @@ curl http://127.0.0.1:9505/metrics
 
 ## Перезапуск и обновление
 
-`Restart=on-failure` перезапускает аварийно завершившийся процесс. **Открытый circuit не завершает процесс**: HTTP остаётся жив, `circuit_open=1`, JMX polling остановлен. После проверки состояния Cassandra восстановление выполняется явно:
+`Restart=on-failure` перезапускает аварийно завершившийся процесс. При ошибке JMX процесс остаётся живым; `/metrics` возвращает 200 с collection_success=0, диагностикой и временем следующей попытки. Старые состояния Cassandra не публикуются. После timeout circuit сам выполняет редкие пробы; успешный снимок восстанавливает сбор **без restart**. Readiness /-/ready в это время возвращает 503.
+
+Ручной restart нужен при изменении конфигурации или обновлении JAR:
 
 ```sh
 sudo systemctl restart casscope
 ```
 
-Не ставьте частый restart loop поверх circuit: он обойдёт защиту от повторных запросов к перегруженной Cassandra.
+Не ставьте restart loop поверх circuit: он сбрасывает backoff и обходит ограничение частоты проб. Мониторьте `/metrics` и подключите alerts; `/-/healthy` подтверждает только жизнь процесса.
 
 Для обновления остановите Casscope, замените `/opt/casscope/casscope.jar` проверенным JAR и запустите снова. Cassandra перезапускать не нужно. Изменение unit требует daemon-reload; изменение YAML/environment — restart Casscope.
 

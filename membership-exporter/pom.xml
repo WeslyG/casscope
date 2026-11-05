@@ -1,6 +1,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>io.github.weslyg</groupId><artifactId>casscope</artifactId><version>1.0.0</version>
+  <groupId>io.github.weslyg</groupId><artifactId>casscope</artifactId><version>1.1.0</version>
   <name>Casscope</name><description>Cassandra membership state exporter for Prometheus</description>
   <url>https://github.com/WeslyG/casscope</url>
   <properties><maven.compiler.release>8</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>

@@ -14,6 +14,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  checks:
+    name: Documentation and Prometheus rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate documentation and Python syntax
+        run: |
+          python3 scripts/check_docs.py
+          python3 -m py_compile scripts/check_release.py scripts/check_docs.py scripts/recovery_lab.py scripts/run_recovery_lab.py
+      - name: Validate Prometheus config and alert rules (no e2e)
+        run: |
+          image=prom/prometheus:v3.6.0@sha256:76947e7ef22f8a698fc638f706685909be425dbe09bd7a2cd7aca849f79b5f64
+          docker run --rm --entrypoint /bin/promtool -v "$PWD:/repo:ro" -w /repo "$image" check config examples/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool -v "$PWD:/repo:ro" -w /repo "$image" test rules tests/prometheus/casscope-alerts.test.yml
   test:
     name: Test Java ${{ matrix.java }}
     runs-on: ubuntu-latest
@@ -66,7 +83,7 @@ jobs:
   release:
     name: Publish JAR
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: test
+    needs: [test, checks]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

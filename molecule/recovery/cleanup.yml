@@ -1,0 +1,9 @@
+---
+- name: Save final recovery evidence
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Capture physical log directory and status
+      ansible.builtin.command:
+        argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", capture]
+      changed_when: false

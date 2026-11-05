@@ -1,0 +1,10 @@
+---
+- name: Run candidate exporter without restarting a healthy process
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure exporter and Prometheus
+      ansible.builtin.command:
+        argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", converge]
+      register: result
+      changed_when: "result.stdout_lines[-1] == 'CHANGED'"

@@ -6,15 +6,21 @@ import java.util.*;
 
 final class MembershipCollector implements MultiCollector {
     private final Poller poller;
-    MembershipCollector(Poller poller) {this.poller=poller;}
+    private final Poller.View captured;
+    private final boolean healthOnly;
+    MembershipCollector(Poller poller) {this(poller,null,false);}
+    MembershipCollector(Poller poller,Poller.View captured,boolean healthOnly) {
+        this.poller=poller;this.captured=captured;this.healthOnly=healthOnly;
+    }
     public MetricSnapshots collect() {
-        Poller.Good good=poller.last.get();boolean fresh=poller.fresh(good);
+        Poller.View view=captured==null?poller.view():captured;
+        Poller.Good good=view.good;boolean fresh=view.fresh;
         List<MetricSnapshot> out=new ArrayList<>();
         scalar(out,"collection_success","A successful fresh JMX snapshot is available",fresh?1:0);
         scalar(out,"snapshot_timestamp_seconds","Last successful snapshot Unix timestamp",good==null?0:good.timestamp);
-        scalar(out,"snapshot_age_seconds","Age of last successful snapshot; -1 before first success",good==null?-1:(System.nanoTime()-good.nanos)/1e9);
+        scalar(out,"snapshot_age_seconds","Age of last successful snapshot; -1 before first success",view.age);
         scalar(out,"poll_in_flight","One JMX cycle is in flight",poller.inFlight.get()?1:0);
-        scalar(out,"circuit_open","Timeout circuit is open; polling suspended until exporter restart",poller.circuitOpen?1:0);
+        scalar(out,"circuit_open","Timeout recovery circuit active; only scheduled probes may read JMX",view.circuit?1:0);
         scalar(out,"polls_total","JMX polling cycles attempted",poller.polls.get());
         scalar(out,"jmx_reads_total","Application getAttributes calls; excludes RMI connection/control traffic",poller.reader.reads());
         scalar(out,"collection_errors_total","Failed JMX polling cycles",poller.failures.get());
@@ -22,7 +28,15 @@ final class MembershipCollector implements MultiCollector {
         scalar(out,"state_conflicts_total","Contradictory state lists observed; no immediate retries",poller.conflicts.get());
         scalar(out,"last_poll_duration_seconds","Duration of last completed JMX cycle",poller.lastDuration);
         scalar(out,"next_poll_delay_seconds","Planned delay after a completed cycle",poller.nextDelay);
-        if(fresh) {
+        scalar(out,"retry_after_seconds","Time until next planned attempt; zero while in flight",view.retryAfter);
+        scalar(out,"consecutive_failures","Consecutive failed collection cycles",poller.consecutiveFailures.get());
+        scalar(out,"timeouts_total","Collection cycles ending in a socket timeout",poller.timeoutFailures.get());
+        scalar(out,"recovery_attempts_total","Scheduled timeout recovery probes",poller.recoveryAttempts.get());
+        scalar(out,"recoveries_total","Successful collections that closed the timeout circuit",poller.recoveries.get());
+        GaugeSnapshot.Builder states=gauge("collector_state","Collector state, one hot; independent of Cassandra peer state");
+        for(Poller.State state:Poller.State.values()) states.dataPoint(point(view.state==state?1:0,"state",state.name().toLowerCase(Locale.ROOT)));
+        out.add(states.build());
+        if(fresh && !healthOnly) {
             Snapshot s=good.snapshot;
             scalar(out,"gossip_running","Local gossip enabled",s.gossip?1:0);
             scalar(out,"native_transport_running","Local CQL transport enabled",s.nativeTransport?1:0);

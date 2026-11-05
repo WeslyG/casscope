@@ -33,12 +33,14 @@ class JmxHttpTest {
             return new MBeanInfo(getClass().getName(),"Fake StorageService",infos.toArray(new MBeanAttributeInfo[0]),null,null,null);
         }
     }
-    @Test void realRmiTimeoutKeepsHttpAliveAndStopsFurtherReadAttempts() throws Exception {
+    @Test void realRmiTimeoutPublishesFailureThenRecoversOnScheduledProbeWithoutRestart() throws Exception {
         int rmiPort, httpPort;
         try(ServerSocket a=new ServerSocket(0);ServerSocket b=new ServerSocket(0)){rmiPort=a.getLocalPort();httpPort=b.getLocalPort();}
         Registry rmi=LocateRegistry.createRegistry(rmiPort);MBeanServer mbeans=MBeanServerFactory.createMBeanServer();
+        java.util.concurrent.atomic.AtomicBoolean delay=new java.util.concurrent.atomic.AtomicBoolean(true);
         Bean bean=new Bean(){public AttributeList getAttributes(String[] names){
-            batches.incrementAndGet();try{Thread.sleep(2000);}catch(InterruptedException e){Thread.currentThread().interrupt();}return new AttributeList();
+            if(delay.get()) {batches.incrementAndGet();try{Thread.sleep(2000);}catch(InterruptedException e){Thread.currentThread().interrupt();}return new AttributeList();}
+            return super.getAttributes(names);
         }};
         mbeans.registerMBean(bean,JmxReader.STORAGE);
         JMXServiceURL url=new JMXServiceURL("service:jmx:rmi:///jndi/rmi://127.0.0.1:"+rmiPort+"/jmxrmi");
@@ -51,7 +53,7 @@ class JmxHttpTest {
             java.nio.file.Files.write(config,yaml.getBytes(StandardCharsets.UTF_8));
             String java=System.getProperty("java.home")+File.separator+"bin"+File.separator+"java";
             String cp=System.getProperty("surefire.test.class.path",System.getProperty("java.class.path"));
-            child=new ProcessBuilder(java,"-cp",cp,Main.class.getName(),"--config",config.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            child=new ProcessBuilder(java,"-Xms16m","-Xmx64m","-cp",cp,Main.class.getName(),"--config",config.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
             String body="";long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(25);
             while(System.nanoTime()<deadline) {
                 try{body=scrape(httpPort);}catch(IOException ignored){}
@@ -59,10 +61,20 @@ class JmxHttpTest {
                 Thread.sleep(100);
             }
             assertThat(body).contains("cassandra_membership_circuit_open{cluster=\"cassandra\",observer=\"local\"} 1.0");
-            int reads=bean.batches.get();assertThat(reads).isBetween(1,2);
+            int reads=bean.batches.get();assertThat(reads).isEqualTo(1);
+            assertThat(status(httpPort,"/metrics")).isEqualTo(200);
+            assertThat(scrape(httpPort)).contains("cassandra_membership_collection_success{cluster=\"cassandra\",observer=\"local\"} 0.0");
+            assertThat(status(httpPort,"/-/ready")).isEqualTo(503);
+            assertThat(status(httpPort,"/-/healthy")).isEqualTo(200);
+            delay.set(false);
             Thread.sleep(2500);
             for(int i=0;i<30;i++)assertThat(scrape(httpPort)).doesNotContain("cassandra_membership_endpoint_status");
             assertThat(bean.batches.get()).isEqualTo(reads);assertThat(child.isAlive()).isTrue();
+            deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(75);
+            while(System.nanoTime()<deadline && !scrape(httpPort).contains("cassandra_membership_collection_success{cluster=\"cassandra\",observer=\"local\"} 1.0")) Thread.sleep(200);
+            assertThat(status(httpPort,"/metrics")).isEqualTo(200);
+            assertThat(scrape(httpPort)).contains("cassandra_membership_collection_success{cluster=\"cassandra\",observer=\"local\"} 1.0");
+            assertThat(bean.batches.get()).isEqualTo(2);assertThat(child.isAlive()).isTrue();
         } finally {
             if(child!=null){child.destroy();if(!child.waitFor(5,TimeUnit.SECONDS))child.destroyForcibly();}
             jmx.stop();UnicastRemoteObject.unexportObject(rmi,true);MBeanServerFactory.releaseMBeanServer(mbeans);
@@ -70,7 +82,15 @@ class JmxHttpTest {
         }
     }
     static String scrape(int port) throws Exception {
-        HttpURLConnection connection=(HttpURLConnection)new URL("http://127.0.0.1:"+port+"/metrics").openConnection();
+        return scrape(port,"/metrics");
+    }
+    static int status(int port,String path) throws Exception {
+        HttpURLConnection connection=(HttpURLConnection)new URL("http://127.0.0.1:"+port+path).openConnection();
+        connection.setConnectTimeout(3000);connection.setReadTimeout(3000);
+        try {return connection.getResponseCode();} finally {connection.disconnect();}
+    }
+    static String scrape(int port,String path) throws Exception {
+        HttpURLConnection connection=(HttpURLConnection)new URL("http://127.0.0.1:"+port+path).openConnection();
         connection.setConnectTimeout(3000);connection.setReadTimeout(3000);connection.setRequestProperty("Accept","text/plain;version=0.0.4");
         try(InputStream input=connection.getInputStream();ByteArrayOutputStream bytes=new ByteArrayOutputStream()) {
             byte[] buf=new byte[8192];int n;while((n=input.read(buf))!=-1)bytes.write(buf,0,n);return bytes.toString("UTF-8");

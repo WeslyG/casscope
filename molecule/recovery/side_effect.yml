@@ -1,0 +1,16 @@
+---
+- name: Real JMX faults, HTTP contract and automatic recovery
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Exercise with unconditional evidence capture
+      block:
+        - name: Execute protocol
+          ansible.builtin.command:
+            argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", exercise]
+          changed_when: true
+      always:
+        - name: Capture even after failed assertion
+          ansible.builtin.command:
+            argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", capture]
+          changed_when: false

@@ -1,0 +1,28 @@
+groups:
+  - name: casscope
+    rules:
+      # The primary scrape job must be named casscope and use /metrics.
+      - alert: CasscopeCollectionUnavailable
+        expr: (up{job="casscope"} == 0) or on(job,instance) (cassandra_membership_collection_success{job="casscope"} == 0)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Нет достоверного сбора Casscope на {{ $labels.instance }}'
+          description: 'Scrape недоступен либо collection_success=0. Проверьте /metrics и Cassandra JMX; старые peer states не считаются актуальными.'
+      - alert: CassandraLocalServiceUnavailable
+        expr: ((cassandra_membership_native_transport_running{job="casscope"} == 0) or (cassandra_membership_gossip_running{job="casscope"} == 0) or (cassandra_membership_initialized{job="casscope"} == 0)) and on(job,instance) (up{job="casscope"} == 1) and on(job,instance) (cassandra_membership_collection_success{job="casscope"} == 1)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Cassandra {{ $labels.observer }} сообщает о выключенном локальном сервисе'
+          description: 'Свежий JMX snapshot доступен, но native transport, gossip или initialized равен 0.'
+      - alert: CassandraPeerReportedDown
+        expr: (cassandra_membership_endpoint_status{job="casscope",status="down"} == 1) and on(job,instance) (up{job="casscope"} == 1) and on(job,instance) (cassandra_membership_collection_success{job="casscope"} == 1)
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.observer }} видит {{ $labels.endpoint }} как DOWN'
+          description: 'Это мнение одного наблюдателя; для общей оценки сравните остальных observers.'

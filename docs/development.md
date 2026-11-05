@@ -11,9 +11,11 @@ membership-exporter/
     Snapshot.java, Endpoint.java # immutable модель и нормализация
     Poller.java, PollPolicy.java # единственный poller, backoff/circuit
     MembershipCollector.java    # exposition из snapshot
-    Main.java                   # CLI и HTTP server
+    MetricsServer.java          # HTTP exposition и readiness
+    Main.java                   # CLI и запуск
   src/test/                     # unit и локальные JMX/RMI/HTTP tests
-examples/                       # YAML и systemd
+examples/                       # YAML, Prometheus alerts и systemd
+molecule/recovery/              # отдельные реальные Cassandra e2e
 .github/workflows/release.yml
 ```
 
@@ -25,8 +27,8 @@ Production-код и все базовые классы JAR должны под�
 cd membership-exporter
 ./mvnw -B -ntp clean verify
 cd ..
-python3 scripts/check_release.py --jar membership-exporter/target/casscope-1.0.0.jar
-java -jar membership-exporter/target/casscope-1.0.0.jar --version
+python3 scripts/check_release.py --jar membership-exporter/target/casscope-1.1.0.jar
+java -jar membership-exporter/target/casscope-1.1.0.jar --version
 ```
 
 JDK нужен для сборки; на целевой машине достаточно Java runtime. Maven Wrapper скачивает закреплённый Maven, зависимости требуют доступа к Maven Central при первом запуске. Python нужен только вспомогательным developer scripts и не нужен для работы JAR.
@@ -47,7 +49,7 @@ JDK нужен для сборки; на целевой машине доста�
 
 ## Версия и release workflow
 
-Единственный источник версии — `membership-exporter/pom.xml`. Текущая версия **1.0.0**, имя выходного файла `casscope-1.0.0.jar`; версия также записана в manifest и доступна через `--version`.
+Единственный источник версии — `membership-exporter/pom.xml`. Текущая версия **1.1.0**, имя выходного файла `casscope-1.1.0.jar`; версия также записана в manifest и доступна через `--version`.
 
 Workflow запускается на PR, push main и тег `v*`:
 
@@ -63,11 +65,13 @@ Workflow запускается на PR, push main и тег `v*`:
 
 ```sh
 # Сначала обновить POM, примеры и проверить изменения.
-git tag v1.0.0
+git tag v1.1.0
 git push origin main
-git push origin v1.0.0
+git push origin v1.1.0
 ```
 
 Эти команды относятся к осознанной публикации: push тега запускает release workflow. Само добавление remote или локального тега релиз не публикует. Не передвигайте выпущенный тег и не заменяйте опубликованный asset; для исправления используйте новую версию. Ошибка загрузки оставляет draft для разбора. Повторный запуск может заменить asset только в незавершённом draft после повторного прохождения тестов; опубликованный релиз workflow отвергает.
 
 В release добавляется только JAR. Автоматические `Source code` архивы интерфейса GitHub могут отображаться отдельно; workflow не загружает дополнительные ZIP/TAR, конфиги или test reports как release assets.
+
+Проверки документации и Prometheus выполняются отдельным быстрым CI job: `python3 scripts/check_docs.py`, `promtool check config examples/prometheus/prometheus.yml`, `promtool test rules tests/prometheus/casscope-alerts.test.yml`. Отдельные реальные испытания описаны в [testing.md](testing.md).

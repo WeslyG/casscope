@@ -1,0 +1,9 @@
+---
+- name: Guarded recovery teardown
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Capture first and remove only labelled resources
+      ansible.builtin.command:
+        argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", destroy]
+      changed_when: true

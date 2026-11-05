@@ -1,0 +1,46 @@
+---
+- name: Create isolated recovery fixture
+  hosts: localhost
+  gather_facts: false
+  vars:
+    fixture_name: "{{ lookup('env', 'CASSCOPE_RECOVERY_NAME') }}"
+    helper: "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py"
+  tasks:
+    - name: Preflight and frozen inputs
+      ansible.builtin.command:
+        argv: [python, "{{ helper }}", preflight]
+      changed_when: false
+    - name: Dedicated network
+      community.docker.docker_network:
+        name: "{{ fixture_name }}"
+        labels:
+          casscope.recovery: "{{ fixture_name }}"
+    - name: Real Cassandra with fixed JMX ports
+      community.docker.docker_container:
+        name: "{{ fixture_name }}-cassandra"
+        image: "{{ lookup('env', 'CASSCOPE_RECOVERY_IMAGE') }}"
+        hostname: "{{ fixture_name }}-cassandra"
+        state: present
+        pull: never
+        memory: 2G
+        memory_swap: 2G
+        cpus: 2
+        labels:
+          casscope.recovery: "{{ fixture_name }}"
+        env:
+          CASSANDRA_CLUSTER_NAME: "{{ fixture_name }}"
+          CASSANDRA_SEEDS: "{{ fixture_name }}-cassandra"
+          CASSANDRA_DC: dc1
+          CASSANDRA_RACK: rack1
+          CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+          CASSANDRA_NUM_TOKENS: '16'
+          MAX_HEAP_SIZE: 1G
+          HEAP_NEWSIZE: 256M
+          LOCAL_JMX: 'no'
+          JVM_EXTRA_OPTS: '-Djava.util.logging.config.file=/tmp/jul.properties -Dcom.sun.management.jmxremote.authenticate=false -Djava.rmi.server.hostname={{ fixture_name }}-cassandra'
+        networks:
+          - name: "{{ fixture_name }}"
+        log_driver: local
+        log_options:
+          max-size: 30m
+          max-file: '2'

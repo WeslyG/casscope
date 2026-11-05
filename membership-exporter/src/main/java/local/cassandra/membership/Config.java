@@ -12,6 +12,7 @@ public final class Config {
     public String jmxUrl = "service:jmx:rmi:///jndi/rmi://127.0.0.1:7199/jmxrmi";
     public String listenAddress = "127.0.0.1", usernameEnv, passwordEnv;
     public int port = 9505, pollSeconds = 30, backoffSeconds = 300;
+    public int timeoutRetrySeconds = 60, maxTimeoutBackoffSeconds = 900;
     public int socketTimeoutMs = 3000, slowPollMs = 1000, staleSeconds = 90, maxEndpoints = 1000;
 
     public static Config load(Path path) throws IOException {
@@ -33,6 +34,8 @@ public final class Config {
                 case "port": c.port=Integer.parseInt(v); break;
                 case "poll_interval_seconds": c.pollSeconds=Integer.parseInt(v); break;
                 case "max_backoff_seconds": c.backoffSeconds=Integer.parseInt(v); break;
+                case "timeout_retry_seconds": c.timeoutRetrySeconds=Integer.parseInt(v); break;
+                case "max_timeout_backoff_seconds": c.maxTimeoutBackoffSeconds=Integer.parseInt(v); break;
                 case "socket_timeout_ms": c.socketTimeoutMs=Integer.parseInt(v); break;
                 case "slow_poll_ms": c.slowPollMs=Integer.parseInt(v); break;
                 case "stale_after_seconds": c.staleSeconds=Integer.parseInt(v); break;
@@ -49,7 +52,9 @@ public final class Config {
         if (port<1 || port>65535 || pollSeconds<15 || pollSeconds>3600 || backoffSeconds<pollSeconds || backoffSeconds>3600
                 || socketTimeoutMs<100 || socketTimeoutMs>30000
                 || slowPollMs<1 || slowPollMs>socketTimeoutMs || staleSeconds<pollSeconds || staleSeconds>7200
-                || maxEndpoints<1 || maxEndpoints>10000)
+                || maxEndpoints<1 || maxEndpoints>10000
+                || timeoutRetrySeconds<60 || timeoutRetrySeconds<pollSeconds
+                || maxTimeoutBackoffSeconds<timeoutRetrySeconds || maxTimeoutBackoffSeconds>3600)
             throw new IllegalArgumentException("Invalid limits: minimum poll 15s; check exporter.yaml");
         if ((usernameEnv==null)!=(passwordEnv==null)) throw new IllegalArgumentException("Both credential environment names required");
     }

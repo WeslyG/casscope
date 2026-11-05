@@ -1,0 +1,23 @@
+---
+prerun: false
+dependency:
+  name: galaxy
+  enabled: false
+ansible:
+  executor:
+    backend: ansible-playbook
+    args:
+      ansible_playbook:
+        - --inventory=${MOLECULE_SCENARIO_DIRECTORY}/inventory.yml
+  env:
+    ANSIBLE_FORCE_COLOR: '0'
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    side_effect: side_effect.yml
+    verify: verify.yml
+    cleanup: cleanup.yml
+    destroy: destroy.yml
+scenario:
+  test_sequence: [syntax, create, prepare, converge, idempotence, side_effect, verify, cleanup, destroy]

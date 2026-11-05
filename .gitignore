@@ -6,3 +6,18 @@
 /research/Status-*.java
 /membership-exporter/target/
 /.artifacts/
+__pycache__/
+
+# Local research, historical reports and experiment helpers.
+/research/
+/VALIDATION.md
+/jmx-exporter-implementation-plan.md
+/casscope-testing-plan.md
+/exporter-comparison.md
+/molecule/real/
+/scripts/analyze_real_tests.py
+/scripts/capture_final_logs.py
+/scripts/check_capture_paths.py
+/scripts/real_fixture.py
+/scripts/record_fixture_events.py
+/scripts/run_real_tests.py

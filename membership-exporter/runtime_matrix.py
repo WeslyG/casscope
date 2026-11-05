@@ -36,7 +36,13 @@ try:
         deadline=time.monotonic()+40
         marker=f'cassandra_membership_collection_success{{cluster="cassandra",observer="java{version}"}} 1.0'
         while time.monotonic()<deadline:
-            code=f"import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:{19500+version}/metrics',timeout=5).read().decode())"
+            code=f"""import urllib.request, urllib.error
+try:
+ print(urllib.request.urlopen('http://127.0.0.1:{19500+version}/metrics',timeout=5).read().decode())
+except urllib.error.HTTPError as error:
+ if error.code != 503: raise
+ print('collection_not_ready')
+"""
             body=run('exec','cassandra-lab-cassandra1-1','python3','-c',code).stdout
             if marker in body:
                 assert 'state="normal"' in body

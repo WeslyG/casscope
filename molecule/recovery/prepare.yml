@@ -1,0 +1,9 @@
+---
+- name: Prepare real JMX reference and Prometheus
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Start and wait for actual CQL and JMX
+      ansible.builtin.command:
+        argv: [python, "{{ lookup('env', 'CASSCOPE_RECOVERY_SOURCE') }}/scripts/recovery_lab.py", prepare]
+      changed_when: true

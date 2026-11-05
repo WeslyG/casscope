@@ -1,0 +1,120 @@
+rule_files:
+  - ../../examples/prometheus/casscope-alerts.yml
+evaluation_interval: 10s
+tests:
+  - name: collection HTTP failure must page even without membership series
+    interval: 10s
+    input_series:
+      - series: 'up{job="casscope",instance="cass1:9505"}'
+        values: '0+0x20'
+      - series: 'cassandra_membership_native_transport_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '0+0x20'
+      - series: 'cassandra_membership_endpoint_status{job="casscope",instance="cass1:9505",cluster="test",observer="node1",endpoint="127.0.0.2:7000",status="down"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CasscopeCollectionUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: casscope
+              instance: cass1:9505
+              severity: critical
+            exp_annotations:
+              summary: 'Нет достоверного сбора Casscope на cass1:9505'
+              description: 'Scrape недоступен либо collection_success=0. Проверьте /metrics и Cassandra JMX; старые peer states не считаются актуальными.'
+      - eval_time: 2m
+        alertname: CassandraPeerReportedDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: CassandraLocalServiceUnavailable
+        exp_alerts: []
+  - name: live JMX with CQL disabled must page
+    interval: 10s
+    input_series:
+      - series: 'up{job="casscope",instance="cass1:9505"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_collection_success{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_native_transport_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '0+0x20'
+      - series: 'cassandra_membership_gossip_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_initialized{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CassandraLocalServiceUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: casscope
+              instance: cass1:9505
+              cluster: test
+              observer: node1
+              severity: critical
+            exp_annotations:
+              summary: 'Cassandra node1 сообщает о выключенном локальном сервисе'
+              description: 'Свежий JMX snapshot доступен, но native transport, gossip или initialized равен 0.'
+      - eval_time: 2m
+        alertname: CasscopeCollectionUnavailable
+        exp_alerts: []
+  - name: healthy input has no local service alert
+    interval: 10s
+    input_series:
+      - series: 'up{job="casscope",instance="cass1:9505"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_collection_success{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_native_transport_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_gossip_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_initialized{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CassandraLocalServiceUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: CasscopeCollectionUnavailable
+        exp_alerts: []
+  - name: successful HTTP with failed collection pages and suppresses stale service values
+    interval: 10s
+    input_series:
+      - series: 'up{job="casscope",instance="cass1:9505"}'
+        values: '1+0x20'
+      - series: 'cassandra_membership_collection_success{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '0+0x20'
+      - series: 'cassandra_membership_native_transport_running{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '0+0x20'
+      - series: 'cassandra_membership_endpoint_status{job="casscope",instance="cass1:9505",cluster="test",observer="node1",endpoint="127.0.0.2:7000",status="down"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CasscopeCollectionUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: casscope
+              instance: cass1:9505
+              cluster: test
+              observer: node1
+              severity: critical
+            exp_annotations:
+              summary: 'Нет достоверного сбора Casscope на cass1:9505'
+              description: 'Scrape недоступен либо collection_success=0. Проверьте /metrics и Cassandra JMX; старые peer states не считаются актуальными.'
+      - eval_time: 2m
+        alertname: CassandraPeerReportedDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: CassandraLocalServiceUnavailable
+        exp_alerts: []
+  - name: collection alert clears after successful recovery
+    interval: 10s
+    input_series:
+      - series: 'up{job="casscope",instance="cass1:9505"}'
+        values: '1+0x30'
+      - series: 'cassandra_membership_collection_success{job="casscope",instance="cass1:9505",cluster="test",observer="node1"}'
+        values: '0+0x12 1+0x17'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: CasscopeCollectionUnavailable
+        exp_alerts: []
